@@ -1,0 +1,1 @@
+# detector-consumo-anomalo
