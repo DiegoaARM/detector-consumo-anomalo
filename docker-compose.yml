@@ -1,0 +1,11 @@
+services:
+  detector:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Opcional: explicación con LLM local (Ollama). Vacío = explicación determinista.
+      DETECTOR_LLM_URL: ""
+      DETECTOR_LLM_MODEL: "llama3.2:3b"
+    volumes:
+      - ./data:/app/data

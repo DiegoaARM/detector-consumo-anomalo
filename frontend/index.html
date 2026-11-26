@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Centinela de Consumo · Detector de consumo anómalo</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/app/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">◉</span>
+        <div>
+          <h1>Centinela de Consumo</h1>
+          <p>Detecta picos, explica el contexto, no acusa sin evidencia</p>
+        </div>
+      </div>
+      <div class="status" id="health-pill" role="status">
+        <span class="dot"></span><span id="health-text">Conectando…</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="card controls">
+        <div class="card-title">
+          <h2>1 · Elegir escenario</h2>
+          <span class="muted">Los escenarios son reproducibles</span>
+        </div>
+        <div class="scenario-grid" id="scenario-grid">
+          <button class="scenario-btn" data-scenario="normal"><strong>Normal</strong><span>línea base estable</span></button>
+          <button class="scenario-btn" data-scenario="legit_deploy"><strong>Deploy legítimo</strong><span>CPU + red + release v2.4</span></button>
+          <button class="scenario-btn" data-scenario="suspicious_spike"><strong>Pico sospechoso</strong><span>proceso + IP + persistencia</span></button>
+          <button class="scenario-btn" data-scenario="sustained_load"><strong>Carga sostenida</strong><span>sin causa declarada</span></button>
+        </div>
+        <div class="profile-row">
+          <div>
+            <label for="profile-select">Perfil del equipo</label>
+            <select id="profile-select">
+              <option value="workstation">Estación de trabajo</option>
+              <option value="server">Servidor</option>
+              <option value="development">Desarrollo</option>
+            </select>
+          </div>
+          <p class="muted" id="profile-hint">Umbrales medios para equipo de usuario.</p>
+        </div>
+        <div class="local-scan">
+          <div>
+            <strong>¿Escanear mi PC?</strong>
+            <p class="muted">Lee métricas y procesos locales con psutil. Solo lectura: no mata procesos ni modifica el sistema.</p>
+          </div>
+          <button class="primary" id="local-btn">Escanear mi PC</button>
+        </div>
+        <div class="scan-config">
+          <div>
+            <label for="baseline-input">Línea base (s)</label>
+            <input id="baseline-input" type="number" min="2" max="300" value="4" />
+          </div>
+          <div>
+            <label for="window-input">Ventana observada (s)</label>
+            <input id="window-input" type="number" min="2" max="300" value="4" />
+          </div>
+          <div class="presets">
+            <button class="preset" data-preset="2,2">Rápido 2+2</button>
+            <button class="preset" data-preset="4,4">Estándar 4+4</button>
+            <button class="preset" data-preset="15,15">Extendido 15+15</button>
+          </div>
+        </div>
+        <div class="event-form">
+          <div>
+            <label for="event-type">Tipo de actividad</label>
+            <select id="event-type">
+              <option value="deploy">deploy</option>
+              <option value="backup">backup</option>
+              <option value="render">render</option>
+              <option value="job">job</option>
+              <option value="maintenance">maintenance</option>
+            </select>
+          </div>
+          <div class="grow">
+            <label for="event-detail">Detalle (opcional)</label>
+            <input id="event-detail" maxlength="120" placeholder="ej. release v2.4, copia nocturna" />
+          </div>
+          <div>
+            <label for="event-duration">Duración (min)</label>
+            <input id="event-duration" type="number" min="1" max="1440" value="5" />
+          </div>
+          <div class="grow">
+            <label for="event-processes">Procesos esperados (separados por coma)</label>
+            <input id="event-processes" maxlength="160" placeholder="ej. node, docker, python" />
+          </div>
+          <button id="event-btn">Registrar actividad</button>
+        </div>
+        <p class="hint" id="form-message" aria-live="polite"></p>
+      </section>
+
+      <section class="card monitor-card">
+        <div class="card-title">
+          <h2>Modo monitor</h2>
+          <span class="muted" id="monitor-status">detenido</span>
+        </div>
+        <p class="muted">Acumula muestras reales en segundo plano para comparar futuros escaneos contra tu propio histórico. Solo lectura.</p>
+        <div class="monitor-controls">
+          <div>
+            <label for="monitor-interval">Cada (s)</label>
+            <input id="monitor-interval" type="number" min="10" max="3600" value="60" />
+          </div>
+          <div>
+            <label for="monitor-minutes">Durante (min)</label>
+            <input id="monitor-minutes" type="number" min="1" max="180" value="15" />
+          </div>
+          <button class="primary" id="monitor-start">Iniciar monitor</button>
+          <button id="monitor-stop">Detener</button>
+        </div>
+      </section>
+
+      <section class="card chart-card">
+        <div class="card-title">
+          <h2>2 · Telemetría observada</h2>
+          <span class="muted" id="chart-source">esperando análisis…</span>
+        </div>
+        <svg id="chart" viewBox="0 0 640 220" role="img" aria-label="Gráfica de CPU memoria y red"></svg>
+        <div class="legend">
+          <span><i class="swatch cpu"></i>CPU %</span>
+          <span><i class="swatch mem"></i>Memoria %</span>
+          <span><i class="swatch net"></i>Red saliente (normalizada)</span>
+          <span class="baseline-key">│ inicio de ventana observada</span>
+        </div>
+        <div class="signals" id="signals"></div>
+      </section>
+
+      <section class="card verdict-card" id="verdict-card">
+        <div class="card-title">
+          <h2>3 · Explicación</h2>
+          <span class="muted" id="analysis-meta">—</span>
+        </div>
+        <div class="verdict-head">
+          <span class="badge" id="verdict-badge">sin análisis</span>
+          <span class="confidence" id="confidence">—</span>
+        </div>
+        <p class="summary" id="summary">Ejecuta un escenario o escanea tu PC para ver el análisis.</p>
+        <div class="score-row">
+          <span>Puntuación de desviación</span>
+          <div class="score-track"><div class="score-fill" id="score-fill"></div></div>
+          <strong id="score-value">0.00</strong>
+        </div>
+        <p class="caveat" id="caveat"></p>
+      </section>
+
+      <section class="card context-card">
+        <h3>Contexto de la decisión</h3>
+        <ul id="context-notes" class="list"></ul>
+      </section>
+
+      <section class="card evidence-card">
+        <h3>Evidencia a favor de legitimidad</h3>
+        <ul id="evidence-legit" class="list legit-list"></ul>
+      </section>
+
+      <section class="card evidence-card">
+        <h3>Evidencia que preocupa</h3>
+        <ul id="evidence-susp" class="list susp-list"></ul>
+      </section>
+
+      <section class="card checks-card">
+        <h3>Verificaciones sugeridas</h3>
+        <ol id="checks" class="checks"></ol>
+      </section>
+
+      <section class="card process-card">
+        <div class="card-title">
+          <h2>4 · Procesos y conexiones observadas</h2>
+          <span class="muted" id="process-meta">sin datos</span>
+        </div>
+        <div id="process-findings"></div>
+      </section>
+
+      <section class="card persistence-card">
+        <h3>Persistencia detectada</h3>
+        <div id="persistence-findings"></div>
+      </section>
+
+      <section class="card baseline-card">
+        <div class="card-title">
+          <h2>5 · Línea base histórica</h2>
+          <span class="muted" id="baseline-state">sin datos</span>
+        </div>
+        <div id="baseline-detail"></div>
+      </section>
+
+      <section class="card history-card">
+        <div class="card-title">
+          <h2>Historial de análisis</h2>
+          <span class="muted">Solo escaneos reales · SQLite</span>
+        </div>
+        <div id="history"></div>
+      </section>
+    </main>
+
+    <footer>
+      <span>Modelo: <b id="model-name">—</b></span>
+      <span>Docs interactivas: <a href="/docs" target="_blank" rel="noreferrer">/docs</a></span>
+      <span>Métricas: <a href="/metrics" target="_blank" rel="noreferrer">/metrics</a></span>
+    </footer>
+
+    <script src="/app/app.js"></script>
+  </body>
+</html>
