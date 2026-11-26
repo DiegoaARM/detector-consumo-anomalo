@@ -305,5 +305,9 @@ def classify(f: Features, score: float, profile_name: str = config.DEFAULT_PROFI
             f"«Nuevos» significa que aparecieron solo en la mitad actual de la ventana "
             f"({len(f.new_processes)}); no prueba que se hayan iniciado ahora."
         )
+    notes.append(
+        "La primera mitad de la ventana se usa como línea base: si la carga empieza antes "
+        "del punto medio, esa línea base ya queda elevada."
+    )
     verdict.context_notes = notes
     return verdict
